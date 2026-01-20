@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ギャラリー</title>
+    <!-- Tailwind CSS (デザイン用) -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* ローディングスピナーのアニメーション */
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .animate-spin {
+            animation: spin 1s linear infinite;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans text-gray-800 min-h-screen">
+
+    <!-- メインコンテンツ -->
+    <div class="p-4 md:p-8">
+        
+        <!-- ヘッダーエリア -->
+        <div class="max-w-6xl mx-auto mb-8 text-center">
+            <h1 class="text-2xl md:text-3xl font-bold mb-2 text-gray-700">ギャラリー</h1>
+            <p id="status-text" class="text-gray-500 text-sm">読み込み中...</p>
+            <p id="connection-status" class="text-xs text-blue-500 mt-1 hidden">スプレッドシート連携中</p>
+        </div>
+
+        <!-- エラーメッセージ表示エリア (通常は非表示) -->
+        <div id="error-container" class="max-w-6xl mx-auto mb-4 p-4 bg-red-100 text-red-700 rounded-lg text-center hidden">
+            <span id="error-message"></span><br/>
+            <span class="text-sm text-gray-600">（現在はサンプルデータを表示しています）</span>
+        </div>
+
+        <!-- ローディング中スピナー -->
+        <div id="loading-spinner" class="flex justify-center items-center h-64">
+            <svg class="animate-spin text-gray-400 h-12 w-12" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+        </div>
+
+        <!-- 写真一覧グリッド (JSでここに写真が追加されます) -->
+        <div id="gallery-grid" class="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 hidden">
+            <!-- 写真要素はここに挿入されます -->
+        </div>
+
+    </div>
+
+    <!-- ライトボックス (拡大表示モーダル) -->
+    <div id="lightbox" class="fixed inset-0 z-50 flex items-center justify-center bg-black/95 backdrop-blur-sm hidden opacity-0 transition-opacity duration-300">
+        
+        <!-- 閉じるボタン -->
+        <button onclick="closeGallery()" class="absolute top-4 right-4 text-white/70 hover:text-white z-50 p-2 transition-colors">
+            <!-- Xアイコン -->
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+
+        <!-- 画像表示エリア -->
+        <div class="relative w-full h-full flex flex-col items-center justify-center p-4">
+            <div class="relative max-w-[90vw] max-h-[85vh]">
+                <img id="lightbox-img" src="" alt="" class="max-w-full max-h-[80vh] object-contain shadow-2xl rounded-sm select-none">
+                
+                <!-- タイトルとカウンター -->
+                <div class="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/80 to-transparent p-4 text-white">
+                    <div class="flex justify-between items-end">
+                        <span id="lightbox-title" class="font-medium text-lg md:text-xl drop-shadow-md"></span>
+                        <span id="lightbox-counter" class="text-sm opacity-80 shrink-0 ml-4 font-mono"></span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 左矢印 (前へ) -->
+            <div onclick="prevImage(event)" class="absolute inset-y-0 left-0 w-1/5 md:w-1/4 flex items-center justify-start pl-4 cursor-pointer group hover:bg-white/5 transition-colors">
+                <button class="bg-black/30 group-hover:bg-black/60 text-white rounded-full p-2 md:p-3 transition-all backdrop-blur-sm">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="15 18 9 12 15 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+
+            <!-- 右矢印 (次へ) -->
+            <div onclick="nextImage(event)" class="absolute inset-y-0 right-0 w-1/5 md:w-1/4 flex items-center justify-end pr-4 cursor-pointer group hover:bg-white/5 transition-colors">
+                <button class="bg-black/30 group-hover:bg-black/60 text-white rounded-full p-2 md:p-3 transition-all backdrop-blur-sm">
+                    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="9 18 15 12 9 6"></polyline>
+                    </svg>
+                </button>
+            </div>
+        </div>
+
+        <!-- 背景クリックで閉じるための透明レイヤー -->
+        <div onclick="closeGallery()" class="absolute inset-0 -z-10"></div>
+    </div>
+
+    <!-- JavaScriptロジック -->
+    <script>
+        // ==========================================
+        // 🛠️ 設定エリア: Googleスプレッドシート連携
+        // ==========================================
+        
+        // 【重要】スプレッドシートの準備:
+        // 1. スプレッドシートの右上の「共有」ボタンをクリック
+        // 2. 一般的なアクセスを「リンクを知っている全員」に変更
+        // 3. ブラウザのURLバーにあるID（/d/と/editの間の文字列）を使用します
+        
+        // URLパラメータ 'id' があればそれを優先し、なければデフォルトのIDを使用します
+        // 使用例: index.html?id=YOUR_SPREADSHEET_ID
+        const urlParams = new URLSearchParams(window.location.search);
+        const idParam = urlParams.get('id');
+        
+        // ここにデフォルトで使用したいスプレッドシートのIDを入力してください
+        // https://docs.google.com/spreadsheets/d/XXXXXXX.../edit... なら XXXXXXX... の部分。
+        const DEFAULT_SHEET_ID = ""; 
+        
+        const activeSheetId = idParam || DEFAULT_SHEET_ID;
+
+        // バックアップ用のサンプルデータ（3件）
+        const SAMPLE_DATA = [
+            { id: 1, src: "https://images.unsplash.com/photo-1506905925346-21bda4d32df4?q=80&w=2070&auto=format&fit=crop", title: "Mountain View (Demo)" },
+            { id: 2, src: "https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?q=80&w=2070&auto=format&fit=crop", title: "Ocean Sunset (Demo)" },
+            { id: 3, src: "https://images.unsplash.com/photo-1441974231531-c6227db76b6e?q=80&w=2070&auto=format&fit=crop", title: "Forest Path (Demo)" }
+        ];
+
+        // グローバル変数
+        let photoData = [];
+        let currentIndex = null;
+
+        // HTML要素の参照を取得
+        const galleryGrid = document.getElementById('gallery-grid');
+        const loadingSpinner = document.getElementById('loading-spinner');
+        const statusText = document.getElementById('status-text');
+        const connectionStatus = document.getElementById('connection-status');
+        const errorContainer = document.getElementById('error-container');
+        const errorMessage = document.getElementById('error-message');
+        const lightbox = document.getElementById('lightbox');
+        const lightboxImg = document.getElementById('lightbox-img');
+        const lightboxTitle = document.getElementById('lightbox-title');
+        const lightboxCounter = document.getElementById('lightbox-counter');
+
+        // アプリケーションの開始
+        async function init() {
+            if (!activeSheetId) {
+                // IDがない場合はサンプルデータを表示
+                loadData(SAMPLE_DATA);
+                return;
+            }
+
+            try {
+                // スプレッドシートIDからCSVエクスポートURLを構築
+                // 注意: スプレッドシートの共有設定で「リンクを知っている全員が閲覧可」になっている必要があります
+                const csvUrl = `https://docs.google.com/spreadsheets/d/${activeSheetId}/export?format=csv`;
+                
+                const response = await fetch(csvUrl);
+                if (!response.ok) {
+                    if (response.status === 404) throw new Error('シートが見つかりません。IDを確認してください。');
+                    if (response.status === 401 || response.status === 403) throw new Error('アクセス権限がありません。「リンクを知っている全員」に設定してください。');
+                    throw new Error('データの取得に失敗しました');
+                }
+                const text = await response.text();
+                
+                // CSVをパースしてオブジェクト配列に変換
+                const lines = text.split('\n');
+                const parsedData = lines.slice(1) // ヘッダー行をスキップ
+                    .filter(line => line.trim() !== '')
+                    .map((line, index) => {
+                        const parts = line.split(',');
+                        // URL取得 (A列: index 0)
+                        const src = parts[0]?.trim();
+                        // タイトル取得 (B列: index 1 のみを使用)
+                        let title = parts[1]?.trim() || '';
+                        
+                        // 先頭と末尾の引用符があれば除去
+                        title = title.replace(/^"(.*)"$/, '$1');
+                        
+                        if (!src) return null;
+                        return { id: index + 1, src, title };
+                    })
+                    .filter(item => item !== null);
+
+                if (parsedData.length === 0) {
+                     throw new Error('データが見つかりませんでした。');
+                }
+
+                loadData(parsedData);
+                connectionStatus.textContent = `ID連携中: ${activeSheetId.substring(0,6)}...`;
+                connectionStatus.classList.remove('hidden');
+
+            } catch (err) {
+                console.error(err);
+                errorMessage.textContent = `エラー: ${err.message}`;
+                errorContainer.classList.remove('hidden');
+                loadData(SAMPLE_DATA); // エラー時はサンプルデータを表示
+            }
+        }
+
+        // データの読み込み完了処理
+        function loadData(data) {
+            photoData = data;
+            loadingSpinner.classList.add('hidden');
+            galleryGrid.classList.remove('hidden');
+            statusText.textContent = "写真をクリックすると拡大表示されます";
+            renderGallery();
+        }
+
+        // サムネイルグリッドの描画
+        function renderGallery() {
+            galleryGrid.innerHTML = ''; // クリア
+            photoData.forEach((photo, index) => {
+                const div = document.createElement('div');
+                div.className = "aspect-[3/2] overflow-hidden rounded-lg shadow-md cursor-pointer hover:shadow-xl hover:scale-105 transition-all duration-300 bg-white group";
+                div.onclick = () => openGallery(index);
+                
+                const img = document.createElement('img');
+                img.src = photo.src;
+                img.alt = photo.title;
+                img.className = "w-full h-full object-cover group-hover:opacity-90 transition-opacity";
+                img.loading = "lazy";
+                
+                div.appendChild(img);
+                galleryGrid.appendChild(div);
+            });
+        }
+
+        // 拡大表示（ライトボックス）を開く
+        function openGallery(index) {
+            currentIndex = index;
+            updateLightbox();
+            lightbox.classList.remove('hidden');
+            // フェードインアニメーション
+            setTimeout(() => lightbox.classList.remove('opacity-0'), 10);
+            document.body.style.overflow = 'hidden'; // 背景スクロール禁止
+        }
+
+        // 拡大表示を閉じる
+        function closeGallery() {
+            currentIndex = null;
+            lightbox.classList.add('opacity-0');
+            setTimeout(() => {
+                lightbox.classList.add('hidden');
+                document.body.style.overflow = ''; // スクロール解除
+            }, 300);
+        }
+
+        // ライトボックス内の画像更新
+        function updateLightbox() {
+            if (currentIndex === null || !photoData[currentIndex]) return;
+            const photo = photoData[currentIndex];
+            
+            lightboxImg.src = photo.src;
+            lightboxImg.alt = photo.title;
+            lightboxTitle.textContent = photo.title;
+            lightboxCounter.textContent = `${currentIndex + 1} / ${photoData.length}`;
+        }
+
+        // 次の画像へ
+        function nextImage(e) {
+            if(e) e.stopPropagation(); // 背景クリックイベントの伝播防止
+            if (currentIndex !== null) {
+                currentIndex = (currentIndex + 1) % photoData.length;
+                updateLightbox();
+            }
+        }
+
+        // 前の画像へ
+        function prevImage(e) {
+            if(e) e.stopPropagation();
+            if (currentIndex !== null) {
+                currentIndex = (currentIndex - 1 + photoData.length) % photoData.length;
+                updateLightbox();
+            }
+        }
+
+        // キーボード操作対応
+        document.addEventListener('keydown', (e) => {
+            if (currentIndex === null) return;
+            switch(e.key) {
+                case 'ArrowRight': nextImage(); break;
+                case 'ArrowLeft': prevImage(); break;
+                case 'Escape': closeGallery(); break;
+            }
+        });
+
+        // 実行開始
+        init();
+    </script>
+</body>
+</html>
