@@ -61,6 +61,7 @@
         // 1. GoogleスプレッドシートのID設定
         // URLパラメータ "id" で指定できるように変更しました。
         // 例: gallery.html?id=YOUR_SHEET_ID
+        // 指定がない場合は以下のデフォルトIDが使用されます。
         const DEFAULT_SHEET_ID = "";
 
         // URLパラメータからIDを取得するロジック
@@ -94,18 +95,29 @@
             }
         ];
 
-        // Google Driveの画像URL生成ヘルパー
-        const getDriveUrl = (id, demoUrl) => {
-            if (!id) return '';
-            if (id.startsWith("demo_") && demoUrl) return demoUrl;
+        // 画像URL生成ヘルパー
+        // IDが通常のURLの場合はそのまま返し、そうでない場合はGoogle Drive IDとして処理
+        const getImageUrl = (idOrUrl, demoUrl) => {
+            if (!idOrUrl) return '';
             
-            let cleanId = id;
-            if (id.includes('id=')) {
-                cleanId = id.split('id=')[1].split('&')[0];
-            } else if (id.includes('/d/')) {
-                cleanId = id.split('/d/')[1].split('/')[0];
+            // デモモード
+            if (idOrUrl.startsWith("demo_") && demoUrl) return demoUrl;
+            
+            // 入力が通常のURL (http/https) の場合はそのまま返す
+            if (idOrUrl.startsWith('http://') || idOrUrl.startsWith('https://')) {
+                return idOrUrl;
+            }
+            
+            // 以下、Google Drive IDとしての処理
+            let cleanId = idOrUrl;
+            // URL形式のDriveリンクからIDを抽出
+            if (idOrUrl.includes('id=')) {
+                cleanId = idOrUrl.split('id=')[1].split('&')[0];
+            } else if (idOrUrl.includes('/d/')) {
+                cleanId = idOrUrl.split('/d/')[1].split('/')[0];
             }
 
+            // Google Driveの画像表示用URLを返す
             return `https://lh3.googleusercontent.com/d/${cleanId}`;
         };
 
@@ -142,8 +154,8 @@
                         const parsedImages = rows.slice(1)
                             .filter(row => row[0] && row[0].trim() !== '')
                             .map((row, index) => ({
-                                id: row[0].trim(),
-                                title: row[1] ? row[1].trim() : `Image ${index + 1}`,
+                                id: row[0].trim(), // A列: ID または URL
+                                title: row[1] ? row[1].trim() : `Image ${index + 1}`, // B列: タイトル
                                 demoUrl: null
                             }));
 
@@ -227,7 +239,7 @@
                         <div className="absolute inset-0 flex items-center justify-center p-0 md:p-2">
                             {currentImage && (
                                 <img
-                                    src={getDriveUrl(currentImage.id, currentImage.demoUrl)}
+                                    src={getImageUrl(currentImage.id, currentImage.demoUrl)}
                                     alt={currentImage.title}
                                     className="max-w-full max-h-full object-contain transition-opacity duration-300 select-none shadow-lg"
                                 />
@@ -273,7 +285,7 @@
                                         className={`relative flex-shrink-0 h-14 w-20 md:h-16 md:w-24 rounded overflow-hidden transition-all duration-300 ${isActive ? 'ring-2 ring-blue-500 opacity-100 scale-105' : 'opacity-50 hover:opacity-80'}`}
                                     >
                                         <img
-                                            src={getDriveUrl(img.id, img.demoUrl)}
+                                            src={getImageUrl(img.id, img.demoUrl)}
                                             alt={`Thumbnail ${idx + 1}`}
                                             className="w-full h-full object-cover"
                                         />
